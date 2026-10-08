@@ -1,0 +1,17 @@
+<network>
+ <name>br-int-net</name>
+ <uuid>41098b94-63ee-4c72-93e1-dd32577f652b</uuid>
+ <forward mode='bridge'/>
+ <bridge name='br-int'/>
+ <virtualport type='openvswitch'/>
+ <portgroup name='vnet-blu'>
+ <vlan>
+ <tag id='100'/>
+ </vlan>
+ </portgroup>
+ <portgroup name='vnet-red'>
+ <vlan>
+ <tag id='200'/>
+ </vlan>
+ </portgroup>
+ </network>

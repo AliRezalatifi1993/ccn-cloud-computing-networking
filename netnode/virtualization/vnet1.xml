@@ -1,0 +1,11 @@
+<network>            #we want a network
+ <name>vnet1</name>      #name of the network
+ <forward mode='nat'/>      #mode of this network can be nat 
+or host only
+ <ip address='192.168.123.1' netmask='255.255.255.0'> 
+ <dhcp>
+ <range start='192.168.123.2' end='192.168.123.254'/>  #reng 
+of dhcp
+ </dhcp>
+ </ip>
+ </network>
