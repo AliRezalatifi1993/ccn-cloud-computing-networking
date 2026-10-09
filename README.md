@@ -1,115 +1,101 @@
-## Laboratory Architecture
+# Cloud Computing and Networking — Hands-on Laboratory
+
+**University of Rome Tor Vergata · Cloud Computing and Networking (CCN)**
+
+![Linux](https://img.shields.io/badge/OS-Ubuntu-E95420?logo=ubuntu&logoColor=white)
+![Virtualization](https://img.shields.io/badge/Virtualization-KVM%20%7C%20libvirt-516B86)
+![Networking](https://img.shields.io/badge/Networking-Open%20vSwitch%20%7C%20VXLAN-136F63)
+![Containers](https://img.shields.io/badge/Containers-Docker-2496ED?logo=docker&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Orchestration-Kubernetes-326CE5?logo=kubernetes&logoColor=white)
+
+A collection of laboratory scripts, configurations, and small applications used to explore **how cloud infrastructure works beneath the orchestration layer**. The work covers virtual machines, Linux networking, distributed virtual networks, DHCP and routing, remote block storage, Docker, and Kubernetes.
+
+> **Scope:** This is an educational, multi-node lab that implements and simulates cloud-infrastructure building blocks. It is **not** a complete production OpenStack deployment or a one-command installer.
+
+## Contents
+
+- [Lab architecture](#lab-architecture)
+- [Technologies and learning goals](#technologies-and-learning-goals)
+- [Repository structure](#repository-structure)
+- [Compute-1](#compute-1)
+- [Compute-2](#compute-2)
+- [Netnode](#netnode)
+- [Docker and Kubernetes exercises](#docker-and-kubernetes-exercises)
+- [How to explore this repository](#how-to-explore-this-repository)
+- [Backup and restoration](#backup-and-restoration)
+- [Documentation status](#documentation-status)
+
+## Lab architecture
+
+Three Ubuntu virtual machines were used as the main laboratory nodes in VMware Workstation.
 
 ```mermaid
-flowchart LR
-    Host[VMware Workstation Host]
-
-    subgraph VMnet1[VMnet1 - Host-only - 192.168.56.0/24]
-        C1[compute-1]
-        C2[compute-2]
-        NN[netnode]
+flowchart TB
+    subgraph LAB["VMware Workstation — CCN lab"]
+        direction LR
+        C1["compute-1<br/>KVM and libvirt<br/>Open vSwitch<br/>Container exercises"]
+        C2["compute-2<br/>KVM and libvirt<br/>Open vSwitch"]
+        NN["netnode<br/>DHCP, routing, NAT<br/>Floating IP<br/>LVM and iSCSI"]
     end
 
-    subgraph VMnet8[VMnet8 - NAT - 192.168.96.0/24]
-        NAT1[NAT Connectivity]
-    end
+    C1 ---|"VLAN and VXLAN virtual networks"| C2
+    C1 -->|"DHCP, routing and NAT services"| NN
+    C2 -->|"DHCP, routing and NAT services"| NN
+    C1 -->|"iSCSI remote storage exercise"| NN
+```
 
-    Host --> VMnet1
-    Host --> VMnet8
+**How to read the diagram:**
 
-    C1 --> OVS1[Open vSwitch<br/>br-int / br-tun]
-    C2 --> OVS2[Open vSwitch<br/>br-int / br-tun]
+- **compute-1 and compute-2** represent separate compute hosts. KVM/libvirt runs guest VMs inside these Ubuntu machines; Open vSwitch is used for virtual networking.
+- **VLAN and VXLAN** are studied to connect isolated virtual networks across compute hosts, with forwarding behavior controlled by OpenFlow rules.
+- **netnode** provides networking functions such as DHCP, virtual-router/NAT operations, and floating IPs. It also serves as a remote-storage node in the iSCSI/LVM exercises.
+- **Docker and Kubernetes** exercises are included in the repository as application and container orchestration work.
 
-    OVS1 <-- VXLAN / VLAN --> OVS2
+The diagram is a **logical overview**, not a wiring diagram of every interface or proof that every possible service was running simultaneously.
 
-    NN --> DHCP[DHCP Services]
-    NN --> Router[Routing / NAT]
-    NN --> Floating[Floating IP]
-    NN --> ISCSI[iSCSI / LVM Storage]
+### VMware host networks
 
-    C1 --> Docker1[Docker / Microservices]
-    C1 --> K8s[Kubernetes Lab]
-    C2 --> VMs2[KVM / Libvirt VMs]
-    C1 --> VMs1[KVM / Libvirt VMs]
+The original VMware Virtual Network Editor showed these networks:
 
-    C1 -. storage access .-> ISCSI
-    C2 -. storage access .-> ISCSI
-    C1 -. network services .-> DHCP
-    C2 -. network services .-> DHCP
-    C1 -. external connectivity .-> Floating
-    C2 -. external connectivity .-> Floating
+| Network | Type | Subnet | DHCP |
+| --- | --- | --- | --- |
+| `VMnet1` | Host-only | `192.168.56.0/24` | Enabled |
+| `VMnet8` | NAT | `192.168.96.0/24` | Enabled |
 
----
+These are *VMware host-level* networks, distinct from the tenant-like virtual networks configured inside the Ubuntu machines. The exact network adapter mapping for each VM should be recorded separately when reproducing the lab.
 
-# 2) What this diagram shows
+## Technologies and learning goals
 
-This explains your lab visually:
+| Area | Technologies | Laboratory goals |
+| --- | --- | --- |
+| Virtualization | KVM, QEMU, libvirt, `virt-install` | Define VMs, attach disks and network interfaces, manage guest instances |
+| Virtual switching | Linux bridge, Open vSwitch, OpenFlow | Connect virtual interfaces and program forwarding behavior |
+| Network virtualization | VLAN, VXLAN | Extend logically separate virtual networks across hosts |
+| Network services | Linux network namespaces, DHCP, routing, SNAT/DNAT | Provide address allocation, gateways and floating IP connectivity |
+| Storage | LVM, iSCSI | Compare local/ephemeral disks with network-attached persistent block storage |
+| Containers | Docker, Dockerfiles, Python | Package microservices and experiment with container networking |
+| Orchestration | Kubernetes, YAML manifests | Explore pods, services, deployments and inter-service communication |
+| Automation | Bash, XML, YAML | Configure and document lab components as reusable files |
 
-- **compute-1** and **compute-2** are the compute nodes
-- both use **KVM/libvirt**
-- both use **Open vSwitch**
-- they communicate with each other using **VLAN/VXLAN**
-- **netnode** provides:
-  - **DHCP**
-  - **routing/NAT**
-  - **floating IP**
-  - **iSCSI/LVM storage**
-- `compute-1` also contains your **Docker / Kubernetes / microservice** work
-
----
-
-# 3) A simpler version if you want less detail
-
-If you want a cleaner and simpler visual, use this:
-
-```markdown
-## Simplified Architecture
-
-```mermaid
-flowchart TD
-    A[VMware Workstation]
-
-    A --> C1[compute-1]
-    A --> C2[compute-2]
-    A --> N[netnode]
-
-    C1 --> C1R[KVM / Libvirt]
-    C1 --> C1N[Open vSwitch]
-    C1 --> C1D[Docker / Kubernetes]
-
-    C2 --> C2R[KVM / Libvirt]
-    C2 --> C2N[Open vSwitch]
-
-    N --> ND[DHCP / NAT / Floating IP]
-    N --> NS[iSCSI / LVM Storage]
-
-    C1 <-- VLAN / VXLAN --> C2
-    C1 -. uses network & storage .-> N
-    C2 -. uses network & storage .-> N
-
----
-
-# 4) Folder structure visual for README
-
-You can also add this below the diagram:
-
-```markdown
-## Repository Structure
+## Repository structure
 
 ```text
 ccn-cloud-computing-networking/
+├── README.md
 ├── compute-1/
 │   ├── virtualization/
 │   ├── networking/
 │   └── storage/
 ├── compute-2/
 │   ├── virtualization/
-│   └── networking/
+│   ├── networking/
+│   └── README.md
 ├── netnode/
 │   ├── virtualization/
 │   ├── networking/
 │   │   └── dhcp/
-│   └── storage/
+│   ├── storage/
+│   └── README.md
 └── microservices/
     ├── sum/
     ├── sum.kubernetes/
@@ -118,282 +104,138 @@ ccn-cloud-computing-networking/
     │   └── add2/
     ├── pingcontainers/
     └── name/
+```
 
+*This tree summarizes the files identified and organized during the backup process; additional files may exist in the repository.*
+
+## Compute-1
+
+**Path:** [`compute-1/`](compute-1/)
+
+The first compute node was used for KVM/libvirt, virtual switching, the VXLAN lab, iSCSI access, and container-oriented exercises.
+
+| File | Role in the lab |
+| --- | --- |
+| `virtualization/vminstall-kvm.sh` | Helper script for VM creation through KVM/libvirt tooling |
+| `virtualization/vminstall-ovs.sh` | Helper script for VM creation with Open vSwitch-related networking |
+| `virtualization/tc3-red.xml` | VM definition associated with the guest named `tc3-red` |
+| `virtualization/br-int-net.xml` | Libvirt network definition associated with the integration bridge |
+| `networking/br-tun-reload-compute-1.sh` | Reapplies or configures tunnel-side Open vSwitch/OpenFlow settings on compute-1 |
+| `storage/compute1-iscsi.sh` | Compute-side script associated with connecting to remote iSCSI storage |
+
+**Key idea:** A compute node runs guests locally while participating in a virtual network that can span multiple hosts.
+
+## Compute-2
+
+**Path:** [`compute-2/`](compute-2/)
+
+The second compute node is the counterpart to compute-1 in the distributed virtualization and virtual networking exercises.
+
+| File | Role in the lab |
+| --- | --- |
+| `virtualization/vminstall-kvm.sh` | KVM/libvirt VM creation helper |
+| `virtualization/vminstall-ovs.sh` | VM creation helper for Open vSwitch networking |
+| `virtualization/tc2-red.xml` | VM definition associated with `tc2-red` |
+| `virtualization/vnet1.xml` | Libvirt virtual network definition |
+| `virtualization/br-int-net.xml` | Integration-bridge-related network definition |
+| `networking/br-tun-reload-compute-2.sh` | Tunnel bridge and distributed network configuration helper |
+
+**Key idea:** Virtual networking connects guests across compute hosts without treating each host's local bridge as an isolated network.
+
+## Netnode
+
+**Path:** [`netnode/`](netnode/) · [Detailed netnode notes](netnode/README.md)
+
+Netnode combines **network services** with the **remote storage** functionality used in the labs.
+
+### Networking and DHCP
+
+| File | Role in the lab |
+| --- | --- |
+| `networking/add-floating.sh` | Adds a floating-IP-related address and NAT rules for a private VM |
+| `networking/br-tun-reload-netnode.sh` | Configures or reloads tunnel-side Open vSwitch networking on netnode |
+| `networking/neotronsim-reload.sh` | Reloads parts of the simulated Neutron-style networking setup |
+| `networking/neotronsimr.sh` | Supporting script for the simulated routing/network-service environment |
+| `networking/dhcp/vnet1-dhcp.conf` | DHCP configuration for virtual network 1 |
+| `networking/dhcp/vnet2-dhcp.conf` | DHCP configuration for virtual network 2 |
+
+The DHCP files preserve the lab's network-specific settings. Consult the files themselves for the **exact address pools, interfaces and DHCP options**.
+
+### Remote storage
+
+| File | Role in the lab |
+| --- | --- |
+| `storage/netnode-iscsi.sh` | Storage-side configuration associated with iSCSI and the LVM-backed storage lab |
+
+The storage exercise explores allocating a logical volume on a storage node and exporting block storage to a compute-side initiator through iSCSI. **Do not run storage setup scripts on a different machine without checking device names; commands may change or overwrite disks.**
+
+### Additional virtualization definitions
+
+| File | Role in the lab |
+| --- | --- |
+| `virtualization/vminstall-kvm.sh` | KVM/libvirt VM creation helper |
+| `virtualization/vminstall-ovs.sh` | VM creation helper for Open vSwitch connectivity |
+| `virtualization/tc2-red.xml` | Preserved libvirt guest definition |
+| `virtualization/vnet1.xml` | Preserved libvirt virtual network definition |
+| `virtualization/br-int-net.xml` | Integration-bridge-related libvirt network definition |
+
+## Docker and Kubernetes exercises
+
+**Path:** [`microservices/`](microservices/)
+
+| Directory | Contents and intended learning goal |
+| --- | --- |
+| [`sum/`](microservices/sum/) | Python `sum.py` and `Dockerfile` — packaging a simple application as a Docker image |
+| [`sum.kubernetes/`](microservices/sum.kubernetes/) | `sum.py`, `Dockerfile`, `sum.yaml` — container image and Kubernetes-related manifest |
+| [`chain/add1/`](microservices/chain/add1/) | Python `add1.py` and `Dockerfile` — one component of a service chain |
+| [`chain/add2/`](microservices/chain/add2/) | Python `add2.py` and `Dockerfile` — another component of the chain |
+| [`pingcontainers/`](microservices/pingcontainers/) | `Dockerfile` associated with container networking/connectivity experiments |
+| [`name/`](microservices/name/) | Preserved Python `name.py` application |
+
+These exercises connect cloud networking concepts to **containerized microservices**. The course also covers pods, deployments, services, ingress, and composing multi-service applications; not every topic necessarily has a separate implementation in this repository.
+
+## How to explore this repository
+
+Clone it to a Linux machine with Git installed:
+
+```bash
+git clone https://github.com/AliRezalatifi1993/ccn-cloud-computing-networking.git
+cd ccn-cloud-computing-networking
+```
+
+Start by reading the node directories and the source/configuration files. **Do not run the networking or storage scripts without reviewing them:** many depend on the original lab's interfaces, networks, namespaces, and virtual disks.
+
+To contribute an update to your own working copy:
+
+```bash
+git pull --ff-only origin main
+# Edit files and review your changes
+git status
+git add README.md
+git diff --cached
+git commit -m "Improve CCN lab documentation"
+git push origin main
+```
+
+If multiple machines edit the same repository, pull the latest changes before starting new work and resolve any conflicting changes before pushing.
+
+## Backup and restoration
+
+The **complete VMware VM folders** (`compute-1`, `compute-2`, and `netnode`) are backed up separately in private OneDrive storage. Their virtual disks are **not** stored in this Git repository.
+
+For full restoration, retrieve the entire original VM folders, including the `.vmx` configuration and all linked `.vmdk` disk files. Restore the correct VMware virtual networks, verify network adapter assignments, and enable nested virtualization if required by the KVM exercises.
+
+The GitHub repository preserves selected **code, scripts, and configuration files**; it is not a replacement for the full VM backup.
+
+## Documentation status
+
+- The three node directories and the microservice projects were identified during the CCN backup process.
+- **File purposes are high-level descriptions** based on names and course activities; exact script behavior should be verified against the source code.
+- DHCP settings, interface names, OpenFlow rules, and iSCSI device paths should be documented in more detail after inspecting the scripts.
+- Potential future improvements: verified execution steps, topology screenshots, test results, detailed per-script commentary, and a CI workflow for a Python service.
+
+> **Security note:** Do not commit passwords, private SSH keys, GitHub tokens, iSCSI credentials, or other secrets. Review configuration files before making a repository public.
 
 ---
 
-# 5) Nice badges for the top of README
-
-At the top of the README, you can add badges like this:
-
-```markdown
-![Platform](https://img.shields.io/badge/platform-Ubuntu-orange)
-![Virtualization](https://img.shields.io/badge/virtualization-KVM%20%7C%20libvirt-blue)
-![Networking](https://img.shields.io/badge/networking-Open%20vSwitch%20%7C%20VXLAN-green)
-![Containers](https://img.shields.io/badge/containers-Docker-blue)
-![Orchestration](https://img.shields.io/badge/orchestration-Kubernetes-326ce5)
-![Storage](https://img.shields.io/badge/storage-iSCSI%20%7C%20LVM-lightgrey)
-
-
-
-
-
-# Cloud Computing and Networking — Hands-on Laboratory
-
-**University:** University of Rome Tor Vergata  
-**Course:** Cloud Computing and Networking (CCN)
-
-## 1. Project Overview
-
-This repository contains practical laboratory exercises developed during the Cloud Computing and Networking course.
-
-The objective was to understand and implement the technologies behind cloud infrastructure, including server virtualization, software-defined networking, virtual network services, remote storage, containerization, and container orchestration.
-
-Rather than relying entirely on cloud management platforms, the laboratory explores how the underlying infrastructure can be configured using Linux tools, scripts, and open-source technologies.
-
-### Main Technologies
-
-- **Virtualization:** VMware Workstation, KVM, QEMU, libvirt
-- **Virtual Networking:** Linux Bridge, Open vSwitch, OpenFlow
-- **Network Virtualization:** VLAN, VXLAN
-- **Network Services:** Linux namespaces, DHCP, routing, NAT, floating IPs
-- **Cloud Storage:** LVM, iSCSI, persistent and ephemeral storage
-- **Containers:** Docker, Dockerfiles, Linux namespaces and cgroups
-- **Orchestration:** Kubernetes, Pods, Services and deployment manifests
-- **Programming and Automation:** Bash, Python, XML, YAML
-
-## 2. Laboratory Architecture
-
-The main infrastructure consists of three Ubuntu virtual machines deployed using VMware Workstation.
-
-| Node | Role |
-|---|---|
-| compute-1 | Compute node for KVM/libvirt, Open vSwitch networking, virtual machines and container experiments |
-| compute-2 | Second compute node for distributed virtualization and inter-host networking |
-| netnode | Networking and storage node supporting DHCP, virtual routing, NAT, floating IP and iSCSI experiments |
-
-### VMware Networking
-
-The original VMware host environment uses two networks:
-
-| VMware Network | Mode | Subnet |
-|---|---|---|
-| VMnet1 | Host-only | 192.168.56.0/24 |
-| VMnet8 | NAT | 192.168.96.0/24 |
-
-These are VMware-level networks. Additional virtual networks are configured inside the Ubuntu nodes.
-
-### Virtual Network Architecture
-
-The laboratory investigates extending isolated virtual networks across different compute nodes using:
-
-- Local integration bridges (`br-int`)
-- Tunnel bridges (`br-tun`)
-- VLAN identifiers for local segmentation
-- VXLAN tunnels for inter-host communication
-- OpenFlow rules for packet forwarding and encapsulation
-
-The course exercises include virtual networks associated with VLAN IDs 100 and 200 and their corresponding VXLAN identifiers.
-
-The network services are implemented using Linux networking components to simulate functionality commonly managed by OpenStack Neutron.
-
-**Note:** This is a hands-on infrastructure simulation, not a complete production OpenStack deployment.
-
-## 3. Compute-1 — Virtualization and Networking
-
-**Directory:** `compute-1/`
-
-Compute-1 is the first compute node, used to investigate the creation and networking of virtual machines.
-
-### Virtualization
-
-- `vminstall-kvm.sh` — Script for creating or launching virtual machines using KVM/libvirt.
-- `vminstall-ovs.sh` — Script associated with connecting virtual machines to Open vSwitch.
-- `tc3-red.xml` — Libvirt configuration associated with the `tc3-red` VM.
-- `br-int-net.xml` — Network configuration associated with the integration bridge.
-
-### Virtual Networking
-
-- `br-tun-reload-compute-1.sh` — Script associated with restoring the tunnel bridge, VXLAN networking and OpenFlow configurations.
-
-### Storage
-
-- `compute1-iscsi.sh` — Script associated with attaching remote iSCSI storage to the compute node.
-
-## 4. Compute-2 — Distributed Virtualization
-
-**Directory:** `compute-2/`
-
-Compute-2 acts as an additional compute node for experiments involving virtual machines distributed across multiple hosts.
-
-### Main Files
-
-- `vminstall-kvm.sh` — KVM/libvirt virtual machine installation.
-- `vminstall-ovs.sh` — Virtual machine networking through Open vSwitch.
-- `tc2-red.xml` — Libvirt definition associated with `tc2-red`.
-- `vnet1.xml` — Libvirt virtual network configuration.
-- `br-int-net.xml` — Integration bridge network configuration.
-- `br-tun-reload-compute-2.sh` — Tunnel networking and Open vSwitch configuration script.
-
-### Learning Objectives
-
-- Understand inter-host virtual networking.
-- Connect virtual machines across separate compute nodes.
-- Explore VLAN and VXLAN encapsulation.
-- Configure virtual switching using Open vSwitch and OpenFlow.
-
-## 5. Netnode — Networking and Remote Storage
-
-**Directory:** `netnode/`
-
-Netnode provides network services and remote block storage functionality to the laboratory environment.
-
-### Network Services
-
-| File | Purpose |
-|---|---|
-| `add-floating.sh` | Configures floating IP functionality with NAT |
-| `br-tun-reload-netnode.sh` | Script associated with Open vSwitch tunnel networking |
-| `neotronsim-reload.sh` | Reloads components of the simulated Neutron-style environment |
-| `neotronsimr.sh` | Supporting simulated network-service configuration script |
-
-### DHCP
-
-Two DHCP configuration files are preserved:
-
-- `networking/dhcp/vnet1-dhcp.conf`
-- `networking/dhcp/vnet2-dhcp.conf`
-
-These contain DHCP settings associated with the laboratory's virtual networks.
-
-### iSCSI Storage
-
-The `netnode-iscsi.sh` script is associated with configuring remote block storage.
-
-The relevant laboratory concepts include:
-
-- Physical volumes and volume groups
-- Logical volumes
-- iSCSI targets and initiators
-- Persistent storage for virtual machines
-
-Netnode was used as a storage provider to explore how compute nodes can access virtual disks over a network.
-
-## 6. Docker and Python Microservices
-
-**Directory:** `microservices/`
-
-The laboratory includes Python-based applications packaged into Docker containers.
-
-### Sum Microservice
-
-**Directory:** `microservices/sum/`
-
-Contains a Python sum application and a Dockerfile used to package it as a container image.
-
-### Kubernetes Sum Application
-
-**Directory:** `microservices/sum.kubernetes/`
-
-Contains:
-
-- `sum.py`
-- `Dockerfile`
-- `sum.yaml`
-
-These files are associated with building and deploying the sum application in a Kubernetes environment.
-
-### Chained Microservices
-
-**Directory:** `microservices/chain/`
-
-Contains two application components:
-
-- `add1/`
-- `add2/`
-
-Each contains a Python application and Dockerfile.
-
-The project demonstrates the concept of composing an application from multiple independently containerized services.
-
-### Other Container Exercises
-
-- `microservices/pingcontainers/` — Dockerfile associated with container networking experiments.
-- `microservices/name/` — Python application preserved from the container exercises.
-
-## 7. Kubernetes Concepts
-
-The course investigated deploying and managing containerized applications using Kubernetes.
-
-Topics include:
-
-- Pods and shared networking
-- Deployments and replication
-- Kubernetes Services
-- Container images
-- YAML manifests
-- Inter-service communication
-- Ingress and externally exposed services
-
-The repository currently preserves the Kubernetes-related source code and manifests identified in the original lab environment. Not every course topic necessarily has a separate implementation in this repository.
-
-## 8. Repository Organization
-
-| Directory | Contents |
-|---|---|
-| `compute-1/virtualization/` | KVM/libvirt scripts and XML configurations |
-| `compute-1/networking/` | Open vSwitch and tunnel configuration scripts |
-| `compute-1/storage/` | iSCSI compute-side scripts |
-| `compute-2/virtualization/` | Compute-2 VM and network definitions |
-| `compute-2/networking/` | Compute-2 tunnel configurations |
-| `netnode/virtualization/` | Libvirt scripts and configurations |
-| `netnode/networking/` | Virtual routing, NAT, VXLAN and DHCP |
-| `netnode/storage/` | iSCSI storage script |
-| `microservices/` | Docker, Python and Kubernetes experiments |
-
-The subdirectories provide node-specific scripts and configurations. Additional README files can document their exact command sequences and dependencies.
-
-## 9. Requirements and Reproduction
-
-The laboratory was originally built using Ubuntu guest operating systems running inside VMware Workstation.
-
-Reproducing the environment may require:
-
-- A Linux host or virtual machine with suitable virtualization support
-- Nested virtualization when running KVM inside VMware
-- QEMU/KVM and libvirt
-- Open vSwitch
-- Linux networking utilities
-- Docker
-- Kubernetes tooling for container orchestration exercises
-- Correctly configured VMware networking
-- Suitable disk devices for the storage experiments
-
-**Important:** The scripts contain environment-specific assumptions, such as interface names, IP addresses, network identifiers and storage-device paths.
-
-They should be inspected and adapted before execution on another system. The repository is intended primarily for learning, documentation and demonstrating laboratory work, rather than as a one-command deployment solution.
-
-## 10. Backups
-
-The original VMware virtual machines are preserved separately in private OneDrive storage.
-
-This GitHub repository stores selected source code, scripts, configuration files and project documentation.
-
-Large VM disk images and VMware runtime files are intentionally excluded.
-
-## 11. Documentation and Future Improvements
-
-Planned improvements include:
-
-- Documenting each script command by command
-- Adding the complete laboratory architecture diagram
-- Recording test commands and expected results
-- Adding screenshots of verified experiments
-- Documenting individual Docker and Kubernetes applications
-- Improving repeatability of laboratory configurations
-
-Some file descriptions remain preliminary until their contents and execution results are reviewed.
-
----
-
-**Purpose:** Preserve practical knowledge from the CCN laboratory and demonstrate experience with cloud infrastructure, Linux networking, virtualization and container technologies.
+*Educational laboratory work from the Cloud Computing and Networking course at the University of Rome Tor Vergata. Full VM backups are stored privately; this repository documents the corresponding hands-on configurations and application exercises.*
